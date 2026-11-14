@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live CSV Dashboard</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f5f6fb;--panel:#fff;--ink:#141a2e;--mute:#667089;--line:#e0e4ee;--acc:#4f46e5;--accink:#fff;--warn:#b42318;--warnbg:#fdecea;--soft:#eef0f8}
+html.dark{--bg:#0c1020;--panel:#151b2f;--ink:#e8ecf8;--mute:#94a0bd;--line:#26304d;--acc:#8b93ff;--accink:#0c1020;--warn:#ff9a90;--warnbg:#3a1a1c;--soft:#1d2540}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif}
+button,input,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+button{cursor:pointer;font-weight:500}button:hover{background:var(--soft)}
+button.pri{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:600}button.pri:hover{opacity:.9}
+button:disabled{opacity:.6;cursor:wait}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);padding:12px clamp(14px,3vw,32px)}
+.hrow{display:flex;gap:12px;flex-wrap:wrap;align-items:center;max-width:1280px;margin:0 auto}
+.brand{display:flex;flex-direction:column;min-width:190px}
+.brand b{font-size:16px;letter-spacing:-.01em}
+.brand span{font-size:12px;color:var(--mute)}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:99px;background:var(--soft);margin-left:8px;vertical-align:1px}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;flex:1 1 520px;align-items:center}
+#url{flex:1 1 280px;min-width:0}
+main{max-width:1280px;margin:0 auto;padding:20px clamp(14px,3vw,32px) 48px}
+.banner{background:var(--warnbg);color:var(--warn);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}
+.banner b{display:block}
+.banner button{background:none;border:0;color:inherit;padding:0 4px;font-size:18px;line-height:1}
+.guide{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin-bottom:16px}
+.guide h2{margin:0 0 8px;font-size:15px}.guide ol{margin:0;padding-left:20px;color:var(--mute)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.kpis .card b{display:block;font-size:24px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpis .card span{color:var(--mute);font-size:13px}
+.map{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:16px}
+.map label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mute)}
+.charts{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:16px}
+@media(max-width:900px){.charts{grid-template-columns:1fr}}
+.ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ch h2{font-size:15px;margin:0}
+.seg{display:inline-flex;background:var(--soft);border-radius:8px;padding:2px}
+.seg button{border:0;background:none;padding:4px 10px;font-size:12px;color:var(--mute)}
+.seg button.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:0 1px 2px #0002}
+.cv{position:relative;height:300px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tools input{flex:1 1 200px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{cursor:pointer;user-select:none;color:var(--mute);font-weight:600;font-size:13px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.pg{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:12px;color:var(--mute);flex-wrap:wrap}
+.pg div{display:flex;gap:8px;align-items:center}
+#drop{position:fixed;inset:0;z-index:50;background:#4f46e5d9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;pointer-events:none}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:99px;z-index:60;font-weight:500}
+.nochart{display:flex;height:100%;align-items:center;justify-content:center;color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div class="brand">
+      <div><b>Live CSV Dashboard</b><span class="badge" id="badge">Demo</span></div>
+      <span id="stamp">Not loaded yet</span>
+    </div>
+    <div class="ctl">
+      <input id="url" type="url" placeholder="Paste a CSV link (published Google Sheet, or any CSV URL)" aria-label="CSV link">
+      <button class="pri" id="refresh">Refresh data</button>
+      <button id="upload">Upload CSV</button>
+      <input id="file" type="file" accept=".csv,text/csv,text/plain" hidden>
+      <select id="auto" aria-label="Auto refresh" title="Auto refresh a linked CSV">
+        <option value="0">Auto: off</option><option value="30">Every 30s</option><option value="60">Every 1m</option><option value="300">Every 5m</option>
+      </select>
+      <button id="demo">Demo data</button>
+      <button id="help">Guide</button>
+      <button id="theme" aria-label="Toggle dark mode">Theme</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="banner" id="err" role="alert" hidden><div><b id="errT"></b><span id="errM"></span></div><button id="errX" aria-label="Dismiss">×</button></div>
+
+  <div class="guide" id="guide" hidden>
+    <h2>Getting a live link from Google Sheets</h2>
+    <ol>
+      <li>In your sheet, choose File → Share → Publish to web.</li>
+      <li>Pick the tab you want, set the format to Comma-separated values (.csv), then select Publish.</li>
+      <li>Copy the link, paste it above, and select Refresh data.</li>
+      <li>A normal sheet link also works if sharing is set to "Anyone with the link can view". Any other public CSV URL works if its host allows cross-origin requests; otherwise use Upload CSV.</li>
+    </ol>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="map">
+    <label>Group by <select id="dim"></select></label>
+    <label>Main measure <select id="m1"></select></label>
+    <label>Second measure <select id="m2"></select></label>
+  </div>
+
+  <div class="charts">
+    <div class="card">
+      <div class="ch"><h2 id="mainT">Overview</h2>
+        <div class="seg"><button id="tBar" class="on">Bar</button><button id="tLine">Line</button></div></div>
+      <div class="cv"><canvas id="main" role="img" aria-label="Main chart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="ch"><h2>Share of main measure</h2>
+        <div class="seg"><button id="sDo" class="on">Doughnut</button><button id="sPie">Pie</button></div></div>
+      <div class="cv"><canvas id="share" role="img" aria-label="Share chart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><h2>Data</h2></div>
+    <div class="tools">
+      <input id="q" type="search" placeholder="Search rows" aria-label="Search rows">
+      <select id="cat" aria-label="Filter by group"></select>
+      <select id="size" aria-label="Rows per page"><option>10</option><option>25</option><option>50</option></select>
+      <button id="export">Export filtered CSV</button>
+    </div>
+    <div class="wrap"><table id="tbl"></table></div>
+    <div class="pg"><span id="info"></span><div><button id="prev">Previous</button><span id="pageNo"></span><button id="next">Next</button></div></div>
+  </div>
+</main>
+
+<div id="drop" hidden>Drop a CSV file to load it</div>
+<div id="toast" role="status" hidden></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PAL = ["#4f46e5","#0d9488","#f59e0b","#ec4899","#0ea5e9","#84cc16","#a855f7","#ef4444"];
+const AVG_RE = /margin|rate|percent|ratio|avg|average|score|pct|%/i;
+const S = {cols:[], rows:[], type:{}, dim:"", m1:"", m2:"", mainType:"bar", shareType:"doughnut", q:"", cat:"All", page:1, size:10, sortKey:null, sortDir:1, mode:"demo", file:null, timer:null};
+let mainChart = null, shareChart = null;
+
+/* ---------- helpers ---------- */
+const num = v => { const x = parseFloat(String(v ?? "").replace(/[₹$€£,%\s]/g, "")); return isNaN(x) ? null : x; };
+const compact = new Intl.NumberFormat(undefined, {notation: "compact", maximumFractionDigits: 1});
+const fmt = n => n == null || isNaN(n) ? "–" : Math.abs(n) >= 10000 ? compact.format(n) : (+n.toFixed(2)).toLocaleString();
+const isAvg = c => AVG_RE.test(c);
+const toast = m => { const t = $("#toast"); t.textContent = m; t.hidden = false; clearTimeout(toast.id); toast.id = setTimeout(() => t.hidden = true, 2200); };
+const showErr = (t, m) => { $("#errT").textContent = t; $("#errM").textContent = m; $("#err").hidden = false; };
+const hideErr = () => $("#err").hidden = true;
+
+function parseCSV(t) {
+  t = t.replace(/^\uFEFF/, "");
+  const out = []; let row = [], f = "", q = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) { if (c === '"') { if (t[i+1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && t[i+1] === "\n") i++; row.push(f); out.push(row); row = []; f = ""; }
+    else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); out.push(row); }
+  return out.filter(r => r.some(x => x.trim() !== ""));
+}
+
+function inferTypes() {
+  S.type = {};
+  S.cols.forEach(c => {
+    const v = S.rows.map(r => r[c]).filter(x => x !== "");
+    const n = v.filter(x => num(x) !== null).length;
+    if (v.length && n / v.length >= .8) S.type[c] = "num";
+    else if (v.length && v.filter(x => /\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4}/.test(x) && !isNaN(Date.parse(x))).length / v.length >= .8) S.type[c] = "date";
+    else S.type[c] = "text";
+  });
+}
+
+function pickDefaults() {
+  const nums = S.cols.filter(c => S.type[c] === "num");
+  const uniq = c => new Set(S.rows.map(r => r[c])).size;
+  const cats = S.cols.filter(c => S.type[c] === "text" && uniq(c) > 1 && uniq(c) <= 30);
+  S.dim = cats[0] || S.cols.find(c => S.type[c] === "date") || S.cols.find(c => S.type[c] === "text") || S.cols[0];
+  S.m1 = nums[0] || ""; S.m2 = nums[1] || "";
+}
+
+/* ---------- data loading ---------- */
+function ingest(text, opts) {
+  const data = parseCSV(text);
+  if (data.length < 2) { showErr("No data found", "The CSV needs a header row and at least one data row."); return false; }
+  const seen = {};
+  S.cols = data[0].map((c, i) => { let n = c.trim() || "Column " + (i + 1); if (seen[n]) n += " " + (++seen[n]); else seen[n] = 1; return n; });
+  S.rows = data.slice(1).map(r => Object.fromEntries(S.cols.map((c, i) => [c, (r[i] ?? "").trim()])));
+  inferTypes(); pickDefaults();
+  Object.assign(S, {q: "", cat: "All", page: 1, sortKey: null, mode: opts.mode, file: opts.file || null});
+  $("#q").value = "";
+  hideErr(); fillSelects(); render(); status();
+  return true;
+}
+
+function normalize(u) {
+  const m = u.match(/docs\.google\.com\/spreadsheets\/d\/([\w-]+)\/(?:edit|view)/);
+  if (m) { const g = u.match(/gid=(\d+)/); return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv` + (g ? "&gid=" + g[1] : ""); }
+  return u.replace(/\/pubhtml(\?.*)?$/, "/pub?output=csv");
+}
+
+async function fetchLink(quiet) {
+  const raw = $("#url").value.trim();
+  if (!raw) { showErr("No link yet", "Paste a CSV link above, upload a file, or load the demo data."); return; }
+  let u;
+  try { u = new URL(normalize(raw)); } catch (e) { showErr("That is not a valid link", "Paste a full link that starts with https://."); return; }
+  if (u.hostname.endsWith("google.com")) u.searchParams.set("_cb", Date.now());
+  setBusy(true);
+  try {
+    const res = await fetch(u.toString(), {cache: "no-store"});
+    if (!res.ok) throw new Error("The server returned " + res.status + ".");
+    const text = await res.text();
+    if (/^\s*</.test(text)) throw new Error("The link returned a web page, not CSV. Publish the sheet as CSV, or set sharing to anyone with the link.");
+    if (ingest(text, {mode: "url"})) {
+      try { localStorage.setItem("csvurl", raw); } catch (e) {}
+      if (!quiet) toast("Data refreshed");
+    }
+  } catch (e) {
+    const net = e instanceof TypeError;
+    showErr("Could not load the CSV", net ? "The request was blocked or the network is down. Check the link, and that the host allows cross-origin requests (CORS). Upload CSV works as a fallback." : e.message);
+  } finally { setBusy(false); }
+}
+
+async function readFile(f) {
+  if (!f) return;
+  try {
+    if (ingest(await f.text(), {mode: "file", file: f})) { $("#url").value = ""; toast("Loaded " + f.name); }
+  } catch (e) { showErr("Could not read the file", "Choose the file again; it may have moved or changed."); }
+}
+
+function refresh() {
+  if ($("#url").value.trim()) fetchLink();
+  else if (S.mode === "file" && S.file) readFile(S.file);
+  else if (S.mode === "demo") { ingest(demoCSV(), {mode: "demo"}); toast("Demo data reloaded"); }
+  else fetchLink();
+}
+
+function setBusy(b) { const r = $("#refresh"); r.disabled = b; r.textContent = b ? "Refreshing…" : "Refresh data"; }
+function status() {
+  $("#badge").textContent = S.mode === "url" ? "Live" : S.mode === "file" ? S.file.name : "Demo";
+  $("#stamp").textContent = S.rows.length + " rows · updated " + new Date().toLocaleTimeString();
+}
+function setAuto() {
+  clearInterval(S.timer);
+  const s = +$("#auto").value;
+  if (s) S.timer = setInterval(() => { if ($("#url").value.trim()) fetchLink(true); }, s * 1000);
+}
+
+function demoCSV() {
+  let s = 7; const r = () => (s = s * 16807 % 2147483647) / 2147483647;
+  const pick = a => a[Math.floor(r() * a.length)];
+  const out = ["Date,Region,Channel,Product Line,Orders,Revenue,Ad Spend,Profit Margin"];
+  for (let i = 0; i < 120; i++) {
+    const d = new Date(Date.UTC(2026, 0, 1 + i * 2)).toISOString().slice(0, 10);
+    const o = Math.round(20 + r() * 180), rev = Math.round(o * (40 + r() * 160));
+    out.push([d, pick(["North","South","East","West"]), pick(["Search","Social","Email","Partners"]), pick(["Starter","Pro","Enterprise"]), o, rev, Math.round(rev * (.08 + r() * .2)), (12 + r() * 28).toFixed(1)].join(","));
+  }
+  return out.join("\n");
+}
+
+/* ---------- aggregation ---------- */
+function groups() {
+  const dateDim = S.type[S.dim] === "date", map = new Map();
+  S.rows.forEach(r => {
+    let k = r[S.dim] || "(blank)";
+    if (dateDim) { const t = Date.parse(r[S.dim]); k = isNaN(t) ? "(blank)" : new Date(t).toISOString().slice(0, 7); }
+    if (!map.has(k)) map.set(k, {k, n: 0, a: 0, an: 0, b: 0, bn: 0});
+    const g = map.get(k); g.n++;
+    const x = S.m1 ? num(r[S.m1]) : null, y = S.m2 ? num(r[S.m2]) : null;
+    if (x !== null) { g.a += x; g.an++; } if (y !== null) { g.b += y; g.bn++; }
+  });
+  const list = [...map.values()].map(g => ({k: g.k, n: g.n, a: isAvg(S.m1) ? (g.an ? g.a / g.an : 0) : g.a, b: isAvg(S.m2) ? (g.bn ? g.b / g.bn : 0) : g.b}));
+  return dateDim ? list.sort((p, q) => p.k < q.k ? -1 : 1) : list.sort((p, q) => q.a - p.a);
+}
+
+function total(col) {
+  const v = S.rows.map(r => num(r[col])).filter(x => x !== null), s = v.reduce((a, b) => a + b, 0);
+  return isAvg(col) ? (v.length ? s / v.length : 0) : s;
+}
+
+/* ---------- render ---------- */
+function fillSelects() {
+  const nums = S.cols.filter(c => S.type[c] === "num"), opt = (a, sel) => a.map(c => `<option${c === sel ? " selected" : ""}>${esc(c)}</option>`).join("");
+  $("#dim").innerHTML = opt(S.cols, S.dim);
+  $("#m1").innerHTML = nums.length ? opt(nums, S.m1) : "<option>No number columns</option>";
+  $("#m2").innerHTML = `<option value="">None</option>` + opt(nums, S.m2);
+  fillCats();
+}
+function fillCats() {
+  const vals = [...new Set(S.rows.map(r => r[S.dim]))].sort().slice(0, 100);
+  $("#cat").innerHTML = `<option value="All">All ${esc(S.dim)}</option>` + vals.map(v => `<option value="${esc(v)}">${esc(v || "(blank)")}</option>`).join("");
+  $("#cat").value = S.cat;
+}
+
+function render() { kpis(); charts(); table(); }
+
+function kpis() {
+  const g = groups(), top = S.m1 ? [...g].sort((a, b) => b.a - a.a)[0] : null, k = [];
+  k.push([S.rows.length.toLocaleString(), "Rows"]);
+  if (S.m1) k.push([fmt(total(S.m1)), (isAvg(S.m1) ? "Average " : "Total ") + S.m1]);
+  if (S.m2) k.push([fmt(total(S.m2)), (isAvg(S.m2) ? "Average " : "Total ") + S.m2]);
+  k.push([g.length.toLocaleString(), "Groups in " + S.dim]);
+  if (top) k.push([top.k, "Top by " + S.m1 + " (" + fmt(top.a) + ")"]);
+  $("#kpis").innerHTML = k.map(([v, l]) => `<div class="card"><b title="${esc(v)}">${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
+}
+
+function charts() {
+  mainChart?.destroy(); shareChart?.destroy(); mainChart = shareChart = null;
+  const cs = getComputedStyle(document.documentElement), ink = cs.getPropertyValue("--mute").trim(), grid = cs.getPropertyValue("--line").trim();
+  $("#mainT").textContent = S.m1 ? S.m1 + " by " + S.dim : "Overview";
+  if (typeof Chart === "undefined") { document.querySelectorAll(".cv").forEach(c => c.innerHTML = '<div class="nochart">Charts need an internet connection to load Chart.js.</div>'); return; }
+  if (!S.m1) { document.querySelectorAll(".cv").forEach(c => c.innerHTML = '<div class="nochart">No number columns found to chart.</div>'); return; }
+  const g = groups(), dateDim = S.type[S.dim] === "date", main = dateDim ? g : g.slice(0, 12);
+  const ds = [{label: S.m1, data: main.map(x => x.a), backgroundColor: PAL[0], borderColor: PAL[0], tension: .3, yAxisID: "y"}];
+  const scales = {x: {ticks: {color: ink}, grid: {display: false}}, y: {ticks: {color: ink}, grid: {color: grid}, beginAtZero: true}};
+  if (S.m2) { ds.push({label: S.m2, data: main.map(x => x.b), backgroundColor: PAL[1], borderColor: PAL[1], tension: .3, yAxisID: "y2", type: "line"}); scales.y2 = {position: "right", ticks: {color: ink}, grid: {display: false}, beginAtZero: true}; }
+  mainChart = new Chart($("#main"), {type: S.mainType, data: {labels: main.map(x => x.k), datasets: ds}, options: {responsive: true, maintainAspectRatio: false, scales, plugins: {legend: {labels: {color: ink}}}}});
+  const sh = g.filter(x => x.a > 0).sort((a, b) => b.a - a.a), head = sh.slice(0, 7), rest = sh.slice(7).reduce((a, b) => a + b.a, 0);
+  if (rest > 0) head.push({k: "Other", a: rest});
+  shareChart = new Chart($("#share"), {type: S.shareType, data: {labels: head.map(x => x.k), datasets: [{data: head.map(x => x.a), backgroundColor: PAL, borderColor: cs.getPropertyValue("--panel").trim()}]}, options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position: "bottom", labels: {color: ink}}}}});
+}
+
+function filtered() {
+  const q = S.q.toLowerCase();
+  let r = S.rows.filter(x => (S.cat === "All" || x[S.dim] === S.cat) && (!q || S.cols.some(c => x[c].toLowerCase().includes(q))));
+  if (S.sortKey) {
+    const n = S.type[S.sortKey] === "num", d = S.type[S.sortKey] === "date", k = S.sortKey;
+    const val = x => n ? (num(x[k]) ?? -Infinity) : d ? (Date.parse(x[k]) || 0) : x[k].toLowerCase();
+    r = [...r].sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * S.sortDir);
+  }
+  return r;
+}
+
+function table() {
+  const r = filtered(), pages = Math.max(1, Math.ceil(r.length / S.size));
+  S.page = Math.min(S.page, pages);
+  const slice = r.slice((S.page - 1) * S.size, S.page * S.size);
+  $("#tbl").innerHTML = "<thead><tr>" + S.cols.map(c => `<th class="${S.type[c] === "num" ? "n" : ""}" data-k="${esc(c)}">${esc(c)}${S.sortKey === c ? (S.sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr></thead><tbody>" +
+    slice.map(x => "<tr>" + S.cols.map(c => `<td class="${S.type[c] === "num" ? "n" : ""}">${esc(x[c])}</td>`).join("") + "</tr>").join("") + "</tbody>";
+  $("#info").textContent = r.length ? `Showing ${(S.page - 1) * S.size + 1}–${(S.page - 1) * S.size + slice.length} of ${r.length}` : "No rows match.";
+  $("#pageNo").textContent = `Page ${S.page} of ${pages}`;
+  $("#prev").disabled = S.page <= 1; $("#next").disabled = S.page >= pages;
+}
+
+function exportCSV() {
+  const q = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  const csv = [S.cols.map(q).join(",")].concat(filtered().map(r => S.cols.map(c => q(r[c])).join(","))).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"})); a.download = "filtered-data.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function seg(on, off) { $(on).classList.add("on"); $(off).classList.remove("on"); }
+
+/* ---------- events ---------- */
+$("#refresh").onclick = refresh;
+$("#url").addEventListener("keydown", e => { if (e.key === "Enter") fetchLink(); });
+$("#upload").onclick = () => $("#file").click();
+$("#file").onchange = e => { readFile(e.target.files[0]); e.target.value = ""; };
+$("#demo").onclick = () => { $("#url").value = ""; ingest(demoCSV(), {mode: "demo"}); toast("Demo data loaded"); };
+$("#help").onclick = () => $("#guide").hidden = !$("#guide").hidden;
+$("#errX").onclick = hideErr;
+$("#auto").onchange = setAuto;
+$("#theme").onclick = () => {
+  const d = document.documentElement.classList.toggle("dark");
+  try { localStorage.setItem("csvtheme", d ? "dark" : "light"); } catch (e) {}
+  charts();
+};
+$("#dim").onchange = e => { S.dim = e.target.value; S.cat = "All"; S.page = 1; fillCats(); render(); };
+$("#m1").onchange = e => { S.m1 = e.target.value; render(); };
+$("#m2").onchange = e => { S.m2 = e.target.value; render(); };
+$("#tBar").onclick = () => { S.mainType = "bar"; seg("#tBar", "#tLine"); charts(); };
+$("#tLine").onclick = () => { S.mainType = "line"; seg("#tLine", "#tBar"); charts(); };
+$("#sDo").onclick = () => { S.shareType = "doughnut"; seg("#sDo", "#sPie"); charts(); };
+$("#sPie").onclick = () => { S.shareType = "pie"; seg("#sPie", "#sDo"); charts(); };
+$("#q").oninput = e => { S.q = e.target.value; S.page = 1; table(); };
+$("#cat").onchange = e => { S.cat = e.target.value; S.page = 1; table(); };
+$("#size").onchange = e => { S.size = +e.target.value; S.page = 1; table(); };
+$("#prev").onclick = () => { S.page--; table(); };
+$("#next").onclick = () => { S.page++; table(); };
+$("#export").onclick = exportCSV;
+$("#tbl").onclick = e => { const th = e.target.closest("th"); if (!th) return; const k = th.dataset.k; S.sortDir = S.sortKey === k ? -S.sortDir : 1; S.sortKey = k; table(); };
+
+let drag = 0;
+const hasFiles = e => e.dataTransfer?.types?.includes("Files");
+addEventListener("dragenter", e => { if (hasFiles(e)) { e.preventDefault(); drag++; $("#drop").hidden = false; } });
+addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+addEventListener("dragleave", e => { if (hasFiles(e) && --drag <= 0) { drag = 0; $("#drop").hidden = true; } });
+addEventListener("drop", e => { e.preventDefault(); drag = 0; $("#drop").hidden = true; readFile(e.dataTransfer?.files?.[0]); });
+
+/* ---------- start ---------- */
+try { if (localStorage.getItem("csvtheme") === "dark" || (!localStorage.getItem("csvtheme") && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark"); } catch (e) {}
+ingest(demoCSV(), {mode: "demo"});
+try { const u = localStorage.getItem("csvurl"); if (u) { $("#url").value = u; fetchLink(true); } } catch (e) {}
+</script>
+</body>
+</html>
